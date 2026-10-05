@@ -1,0 +1,52 @@
+name: pages
+# Builds the Baselane mods gallery from baselane-sh/mods-catalog with base "/" and serves it at
+# https://baselane-sh.github.io/. The same gallery stays at https://baselane-sh.github.io/mods-catalog/.
+# Both repos are public, so this job needs no secret. It rebuilds every 30 minutes.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: baselane-sh/mods-catalog
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node site/build.mjs
+        env:
+          SITE_BASE: /
+          GITHUB_TOKEN: ${{ github.token }}
+      # The build writes CNAME for mods.baselane.sh when the base is "/". This copy has no custom domain.
+      - run: rm -f _site/CNAME
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
